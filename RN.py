@@ -23,6 +23,35 @@ def _enable_dpi_awareness():
 _enable_dpi_awareness()
 
 
+def _windows_prefers_light_mode() -> Optional[bool]:
+    """Retorna True se o Windows estiver configurado para modo claro.
+
+    Usa a chave de personalização do usuário (AppsUseLightTheme). Se a leitura
+    falhar, devolve None para permitir fallback do CustomTkinter.
+    """
+    if os.name != "nt":
+        return None
+
+    try:
+        import winreg  # type: ignore
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return bool(value)
+    except Exception:
+        return None
+
+
+def _configure_appearance_mode():
+    forced_mode = _windows_prefers_light_mode()
+    if forced_mode is None:
+        ctk.set_appearance_mode("system")
+    else:
+        ctk.set_appearance_mode("light" if forced_mode else "dark")
+
+
+
 def _apply_dark_title_bar(win):
     """Força a barra de título do Windows a ficar escura."""
     try:
@@ -142,7 +171,7 @@ def _show_fatal_error(exc: BaseException):
 
 sys.excepthook = lambda et, ev, tb: _show_fatal_error(ev)
 
-ctk.set_appearance_mode("system")
+_configure_appearance_mode()
 ctk.set_default_color_theme("blue")
 
 CUR_L, CUR_R = "“", "”"
