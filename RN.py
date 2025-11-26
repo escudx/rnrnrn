@@ -1,5 +1,4 @@
 import sys, traceback, os, json
-from typing import Optional
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
@@ -23,46 +22,28 @@ def _enable_dpi_awareness():
 _enable_dpi_awareness()
 
 
-def _windows_prefers_light_mode() -> Optional[bool]:
-    """Retorna True se o Windows estiver configurado para modo claro.
-
-    Usa a chave de personalização do usuário (AppsUseLightTheme). Se a leitura
-    falhar, devolve None para permitir fallback do CustomTkinter.
-    """
-    if os.name != "nt":
-        return None
-
-    try:
-        import winreg  # type: ignore
-
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return bool(value)
-    except Exception:
-        return None
-
-
-def _configure_appearance_mode():
-    forced_mode = _windows_prefers_light_mode()
-    if forced_mode is None:
-        ctk.set_appearance_mode("system")
-    else:
-        ctk.set_appearance_mode("light" if forced_mode else "dark")
-
-
-
-def _apply_dark_title_bar(win):
-    """Força a barra de título do Windows a ficar escura."""
+def _apply_smart_title_bar(win):
+    """Ajusta a cor da barra de título para acompanhar o tema (Claro ou Escuro)."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+        
+        # Detecta se o CustomTkinter decidiu usar tema Escuro ou Claro
+        mode = ctk.get_appearance_mode().lower()
+        is_dark = "dark" in mode
+        
         # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
-        value = ctypes.c_int(1)
+        # Se for Dark, envia 1 (True). Se for Light, envia 0 (False).
+        value = ctypes.c_int(1 if is_dark else 0)
+        
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
     except Exception:
         pass
+
+
+ctk.set_appearance_mode("system")  # Deixa o CustomTkinter ler o Windows sozinho
+ctk.set_default_color_theme("blue")
 
 
 class SafeCTkTextbox(ctk.CTkTextbox):
@@ -147,10 +128,9 @@ def _center_window(win, width=None, height=None, parent=None):
 
         win.geometry(f"{w}x{h}+{x}+{y}")
 
-        # --- CORREÇÃO APLICADA AQUI ---
-        # Força a barra escura após o posicionamento final
-        _apply_dark_title_bar(win)
-        # ------------------------------
+        # USA A NOVA FUNÇÃO INTELIGENTE
+        _apply_smart_title_bar(win)
+        
     except Exception:
         pass
 
@@ -170,9 +150,6 @@ def _show_fatal_error(exc: BaseException):
         print(tb, file=sys.stderr)
 
 sys.excepthook = lambda et, ev, tb: _show_fatal_error(ev)
-
-_configure_appearance_mode()
-ctk.set_default_color_theme("blue")
 
 CUR_L, CUR_R = "“", "”"
 
@@ -1261,7 +1238,7 @@ class RNBuilder(ctk.CTk):
         try:
             dialog = ctk.CTkInputDialog(text=title, title=title)
             try:
-                _apply_dark_title_bar(dialog)
+                _apply_smart_title_bar(dialog)
             except Exception:
                 pass
 
@@ -1476,7 +1453,7 @@ class RNBuilder(ctk.CTk):
         top = ctk.CTkToplevel(self)
         top.title("Gerenciador de Listas")
         try:
-            _apply_dark_title_bar(top)
+            _apply_smart_title_bar(top)
         except Exception:
             pass
         top.transient(self)
@@ -2750,7 +2727,7 @@ def _attach_panels_to_RNBuilder():
         top = ctk.CTkToplevel(self)
         top.title(f"Editar RN #{idx + 1}")
         try:
-            _apply_dark_title_bar(top)
+            _apply_smart_title_bar(top)
         except Exception:
             pass
         top.transient(self)
