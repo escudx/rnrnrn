@@ -115,26 +115,35 @@ INPUT_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.08), _mix_hex(PANEL_BG[1], "#ffff
 
 
 def _center_window(win, width=None, height=None, parent=None):
+    """Centraliza a janela no monitor onde o App (ou o pai) está localizado."""
     try:
         win.update_idletasks()
         w = width or win.winfo_reqwidth()
         h = height or win.winfo_reqheight()
 
         if parent:
-            x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (w // 2)
-            y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (h // 2)
+            # Pega a geometria da janela mãe para centralizar RELATIVO a ela
+            # Isso garante que o popup abra no mesmo monitor que o app principal
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+            pw = parent.winfo_width()
+            ph = parent.winfo_height()
+
+            x = px + (pw // 2) - (w // 2)
+            y = py + (ph // 2) - (h // 2)
         else:
+            # Fallback para o centro da tela principal se não houver pai
             ws = win.winfo_screenwidth()
             hs = win.winfo_screenheight()
             x = (ws // 2) - (w // 2)
             y = (hs // 2) - (h // 2)
 
-        x = max(0, x)
-        y = max(0, y)
-
-        win.geometry(f"{w}x{h}+{x}+{y}")
-
-        # USA A NOVA FUNÇÃO INTELIGENTE
+        # Garante que não saia da tela (coordenadas negativas são válidas em multi-monitor, 
+        # então removemos o max(0, x) simples que poderia quebrar no monitor da esquerda)
+        
+        win.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
+        
+        # Aplica a cor da barra imediatamente após posicionar
         _apply_smart_title_bar(win)
         
     except Exception:
