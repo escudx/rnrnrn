@@ -3,49 +3,47 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
 
-# --- 1. CONFIGURAÇÃO DE DPI (Mantém a interface nítida) ---
+# --- 1. CONFIGURAÇÃO DE DPI ---
 def _enable_dpi_awareness():
     try:
         import ctypes
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        # Tenta definir Per-Monitor V2 (-4). 
+        # Isso impede que o Windows 'estique' a janela (causa do desfoque)
+        # e permite que o CustomTkinter recalcule a escala nitidamente.
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
     except Exception:
         try:
+            # Fallback para System Aware (nível 1) apenas se o V2 falhar
             import ctypes
-            ctypes.windll.user32.SetProcessDPIAware()
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
             pass
 
 _enable_dpi_awareness()
 
-# --- 2. TEMA FORÇADO: DARK MODE SEMPRE ---
-# Ignora o sistema. O app será sempre PRETO.
+# --- 2. INICIALIZAÇÃO PADRÃO (SEMPRE DARK) ---
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-
-def _apply_smart_title_bar(win):
-    """Força a barra de título do Windows a ser ESCURA (Dark Mode)."""
+def _apply_smart_title_bar(win, mode=None):
+    """Força a barra de título a seguir o modo especificado (Dark/Light)."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
         
-        # Valor 1 = True (Ativar Dark Mode na barra)
-        # Forçamos sempre 1, pois o app agora é sempre Dark.
-        value = ctypes.c_int(1)
+        if mode is None:
+            mode = ctk.get_appearance_mode()
+            
+        # Se Dark = 1 (True), Se Light = 0 (False)
+        is_dark = "dark" in mode.lower()
+        value = ctypes.c_int(1 if is_dark else 0)
         
-        # Tenta atributo 20 (Windows 11 / Win 10 recentes)
-        try:
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
-        except:
-            pass
-            
-        # Tenta atributo 19 (Windows 10 antigo), por garantia
-        try:
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), 4)
-        except:
-            pass
-            
+        # Tenta aplicar no DWM (Win11/10)
+        try: ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
+        except: pass
+        try: ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), 4)
+        except: pass
     except Exception:
         pass
 
@@ -1515,6 +1513,36 @@ class RNBuilder(ctk.CTk):
 
         _center_window(top, width=960, height=540, parent=self)
 
+    def _toggle_appearance(self):
+        """Alterna o tema e força a atualização da barra de título."""
+        current = ctk.get_appearance_mode()
+        new_mode = "Light" if current == "Dark" else "Dark"
+        ctk.set_appearance_mode(new_mode)
+        _apply_smart_title_bar(self, new_mode)
+        
+        # Atualiza janelas filhas se existirem
+        try:
+            if hasattr(self, "_mem_manager_window") and self._mem_manager_window:
+                _apply_smart_title_bar(self._mem_manager_window, new_mode)
+        except:
+            pass
+
+    def _open_layout_menu(self):
+        """Abre o menu suspenso do botão Layout."""
+        try:
+            menu = tk.Menu(self, tearoff=False)
+            menu.add_command(label="Alternar Tema (Claro/Escuro)", command=self._toggle_appearance)
+            
+            # Posiciona o menu abaixo do botão
+            bx = self._btn_layout.winfo_rootx()
+            by = self._btn_layout.winfo_rooty() + self._btn_layout.winfo_height()
+            try:
+                menu.tk_popup(bx, by)
+            finally:
+                menu.grab_release()
+        except Exception as e:
+            messagebox.showerror("Menu", str(e))
+
     def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="we", padx=10, pady=(10, 6))
@@ -1525,14 +1553,22 @@ class RNBuilder(ctk.CTk):
 
         actions_bar = ctk.CTkFrame(button_bar, fg_color="transparent")
         actions_bar.pack(side="left", fill="x", expand=True)
-        for text, cmd, width in (
-            ("Limpar construtor", self._clear_builder, 150),
-            ("Gerenciar Listas", self._open_mem_manager, 160),
-            ("Limpar memórias", self._clear_memories, 150),
-            ("Reset geral", self._reset_all, 140),
-        ):
-            ctk.CTkButton(actions_bar, text=text, command=cmd, width=width).pack(side="left", padx=(0, 8), pady=4)
+        
+        # Botões normais
+        btns = [
+            ("Limpar construtor", self._clear_builder, 140),
+            ("Gerenciar Listas", self._open_mem_manager, 140),
+            ("Limpar memórias", self._clear_memories, 140),
+            ("Reset geral", self._reset_all, 120),
+        ]
+        for text, cmd, width in btns:
+            ctk.CTkButton(actions_bar, text=text, command=cmd, width=width).pack(side="left", padx=(0, 6), pady=4)
 
+        # Botão Layout (Menu)
+        self._btn_layout = ctk.CTkButton(actions_bar, text="Layout ▼", command=self._open_layout_menu, width=100)
+        self._btn_layout.pack(side="left", padx=(0, 6), pady=4)
+
+        # Menu Direito (Idioma/Mais)
         more_bar = ctk.CTkFrame(button_bar, fg_color="transparent")
         more_bar.pack(side="right")
         ctk.CTkLabel(more_bar, text="Idioma:").pack(side="left", padx=(0, 6))
@@ -1540,13 +1576,14 @@ class RNBuilder(ctk.CTk):
             more_bar,
             values=["Português", "Español"],
             variable=self._lang_var,
-            width=120,
+            width=110,
             command=self._on_change_lang,
         ).pack(side="left", padx=(0, 12))
 
-        self._more_btn = ctk.CTkButton(more_bar, text="Mais...", command=self._open_more_menu, width=140)
+        self._more_btn = ctk.CTkButton(more_bar, text="Mais...", command=self._open_more_menu, width=100)
         self._more_btn.pack(side="left")
 
+        # Linha inferior do Header
         config_row = ctk.CTkFrame(header, fg_color="transparent")
         config_row.grid(row=1, column=0, sticky="we", pady=(6, 0))
         config_row.grid_columnconfigure(2, weight=1)
@@ -1556,13 +1593,11 @@ class RNBuilder(ctk.CTk):
         ctk.CTkLabel(start_frame, text="RN inicial:").pack(side="left", padx=(0, 6))
         self.spin_start = IntSpin(start_frame, from_=1, to=999, width=110, variable=self.start_idx)
         self.spin_start.pack(side="left")
+        
         def _sync_start(*_):
-            try:
-                value = int(self.start_idx.get())
-            except Exception:
-                value = 1
-            self.spin_start.entry.delete(0, "end")
-            self.spin_start.entry.insert(0, str(value))
+            try: value = int(self.start_idx.get())
+            except: value = 1
+            self.spin_start.entry.delete(0, "end"); self.spin_start.entry.insert(0, str(value))
         self.start_idx.trace_add("write", lambda *a: _sync_start())
         _sync_start()
 
@@ -1585,14 +1620,12 @@ class RNBuilder(ctk.CTk):
         )
 
         def _toggle_preset_free(*_):
-            if self.var_resp_preset.get() == RESP_TEXT_FREE:
+            if self.var_resp.get() == RESP_TEXT_FREE:
                 self.entry_resp_preset_free.pack(side="left", padx=(6, 0))
             else:
                 self.var_resp_preset_free.set("")
-                try:
-                    self.entry_resp_preset_free.pack_forget()
-                except Exception:
-                    pass
+                try: self.entry_resp_preset_free.pack_forget()
+                except: pass
 
         self._resp_register_combo(cb)
         self._resp_bind_combo_capture(cb, lambda: self.var_resp_preset.get(), on_select=_toggle_preset_free)
