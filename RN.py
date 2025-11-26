@@ -22,27 +22,36 @@ def _enable_dpi_awareness():
 _enable_dpi_awareness()
 
 
+def _get_system_theme_is_dark():
+    """Lê o registro do Windows para saber se o sistema está em modo Escuro."""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return val == 0  # 0 significa Escuro, 1 significa Claro
+    except Exception:
+        return True  # Na dúvida, chuta escuro
+
+
 def _apply_smart_title_bar(win):
-    """Ajusta a cor da barra de título para acompanhar o tema (Claro ou Escuro)."""
+    """Aplica a cor na barra de título baseada na configuração REAL do Windows."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
-        
-        # Detecta se o CustomTkinter decidiu usar tema Escuro ou Claro
-        mode = ctk.get_appearance_mode().lower()
-        is_dark = "dark" in mode
-        
+
+        # Lê direto do sistema, ignorando o que o CTk diz
+        is_dark = _get_system_theme_is_dark()
+
         # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
-        # Se for Dark, envia 1 (True). Se for Light, envia 0 (False).
         value = ctypes.c_int(1 if is_dark else 0)
-        
+
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
     except Exception:
         pass
 
 
-ctk.set_appearance_mode("system")  # Deixa o CustomTkinter ler o Windows sozinho
+ctk.set_appearance_mode("system")  # Mantém o sistema
 ctk.set_default_color_theme("blue")
 
 
@@ -2522,53 +2531,55 @@ _attach_builder_to_RNBuilder()
 def _attach_panels_to_RNBuilder():
     def _build_panels(self: 'RNBuilder'):
         parent = self.right_pane
+
+        # --- CONFIGURAÇÃO DO GRID (CORRIGIDO PARA TELAS 14") ---
         parent.grid_columnconfigure(0, weight=1)
-        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(0, weight=1)  # Preview (Cresce pouco)
+        parent.grid_rowconfigure(1, weight=0)  # Botoes (Fixo, nunca esmaga)
+        parent.grid_rowconfigure(2, weight=10)  # Lista (Cresce muito)
 
-        panel_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
-        panel_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=6)
-        panel_scroll.grid_columnconfigure(0, weight=1)
-        panel_body = scrollable_body(panel_scroll)
-        panel_body.grid_columnconfigure(0, weight=1)
-        panel_body.grid_rowconfigure(0, weight=4)
-        panel_body.grid_rowconfigure(1, weight=5)
-
+        # --- 1. PREVIEW ---
         self.preview_collapsible = CollapsibleGroup(
-            panel_body,
+            parent,
             text="Pré-visualização da RN atual",
             start_expanded=True
         )
-        self.preview_collapsible.grid(row=0, column=0, padx=(0,0), pady=(0,8), sticky="nsew")
+        self.preview_collapsible.grid(row=0, column=0, padx=(0,0), pady=(0,4), sticky="nsew")
         preview_group = self.preview_collapsible.get_inner_frame()
         preview_group.grid_rowconfigure(0, weight=1)
         preview_group.grid_columnconfigure(0, weight=1)
 
-        self.prev_box = SafeCTkTextbox(preview_group)
-        self.prev_box.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, 8))
+        self.prev_box = SafeCTkTextbox(preview_group, height=60)  # Altura mínima reduzida
+        self.prev_box.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        try: self.prev_box.configure(wrap="word")
+        except: pass
 
-        try:
-            self.prev_box.configure(wrap="word")
-        except Exception:
-            pass
+        # --- 2. FAIXA DE BOTÕES (AGORA FORA DO GRUPO) ---
+        # Isso impede que eles sumam quando o preview encolhe
+        mid_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        mid_bar.grid(row=1, column=0, sticky="ew", padx=0, pady=(4, 8))
 
-        left_btnbar = ctk.CTkFrame(preview_group, fg_color="transparent")
-        left_btnbar.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2))
-        ctk.CTkButton(left_btnbar, text="Adicionar RN", command=self._add_rn, width=160).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(left_btnbar, text="Adicionar RN e preparar oposto (Sim/Não)",
-                      command=self._add_rn_and_prepare_opposite, width=300).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(left_btnbar, text="Limpar pré-visualização", command=self._clear_preview, width=200).pack(side="left")
+        mid_bar.grid_columnconfigure(0, weight=1)
+        mid_bar.grid_columnconfigure(1, weight=2)
+        mid_bar.grid_columnconfigure(2, weight=1)
 
+        ctk.CTkButton(mid_bar, text="Adicionar RN", command=self._add_rn).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(mid_bar, text="Adicionar + Oposto", command=self._add_rn_and_prepare_opposite).grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(mid_bar, text="Limpar Preview", command=self._clear_preview, fg_color="transparent", border_width=1, text_color=("gray10", "gray90")).grid(row=0, column=2, sticky="ew")
+
+        # --- 3. LISTA FINAL ---
         self.rn_collapsible = CollapsibleGroup(
-            panel_body,
+            parent,
             text="RNs (lista final)",
             start_expanded=True
         )
-        self.rn_collapsible.grid(row=1, column=0, padx=(0,0), pady=(0,0), sticky="nsew")
+        self.rn_collapsible.grid(row=2, column=0, padx=(0,0), pady=(0,0), sticky="nsew")
         rn_group = self.rn_collapsible.get_inner_frame()
-        rn_group.grid_rowconfigure(2, weight=2)
-        rn_group.grid_rowconfigure(3, weight=3)
+
+        rn_group.grid_rowconfigure(2, weight=1)
         rn_group.grid_columnconfigure(0, weight=1)
 
+        # Header Fluxo
         flow_bar = ctk.CTkFrame(rn_group, fg_color="transparent")
         flow_bar.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
         flow_bar.grid_columnconfigure(1, weight=1)
@@ -2580,34 +2591,36 @@ def _attach_panels_to_RNBuilder():
             variable=self.flow_var,
             values=self._get_flow_names(),
             command=self._on_flow_selected,
-            width=220,
+            width=200,
         )
         self.flow_combo.grid(row=0, column=1, sticky="w", pady=2)
 
         flow_btns = ctk.CTkFrame(flow_bar, fg_color="transparent")
         flow_btns.grid(row=0, column=2, sticky="e", padx=(8, 0))
-        ctk.CTkButton(flow_btns, text="Novo", width=70, command=self._new_flow).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(flow_btns, text="Renomear", width=90, command=self._rename_flow).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(flow_btns, text="Excluir", width=80, command=self._delete_flow, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
+        ctk.CTkButton(flow_btns, text="Novo", width=60, command=self._new_flow).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(flow_btns, text="Renomear", width=80, command=self._rename_flow).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(flow_btns, text="Excluir", width=70, command=self._delete_flow, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
 
+        # Botões de Ação da Lista
         right_btnbar = ctk.CTkFrame(rn_group, fg_color="transparent")
         right_btnbar.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Copiar RN", command=self._copy_single_rn, width=120).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Copiar tudo", command=self._copy_all, width=110).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Salvar .txt", command=self._save_txt, width=110).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Limpar RNs", command=lambda: self._clear_rns(confirm=True), width=110).pack(side="left")
 
+        ctk.CTkButton(right_btnbar, text="Copiar RN", command=self._copy_single_rn, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Copiar tudo", command=self._copy_all, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Salvar .txt", command=self._save_txt, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Limpar RNs", command=lambda: self._clear_rns(confirm=True), width=90, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
+
+        # Lista Scrollable
         self.rn_mgr = ctk.CTkScrollableFrame(rn_group)
         self.rn_mgr.grid(row=2, column=0, sticky="nsew", padx=0, pady=(0, 6))
         self.rn_mgr.grid_columnconfigure(0, weight=1)
         self._enable_scrollwheel(self.rn_mgr)
 
-        self.txt = ctk.CTkTextbox(rn_group)
-        self.txt.grid(row=3, column=0, sticky="nsew", padx=0, pady=0)
-        try:
-            self.txt.configure(wrap="word")
-        except Exception:
-            pass
+        # Caixa oculta
+        self.txt = ctk.CTkTextbox(rn_group, height=1)
+        self.txt.grid(row=3, column=0, sticky="ew", padx=0, pady=0)
+        try: self.txt.configure(wrap="word")
+        except: pass
 
         self._refresh_flow_controls()
 
