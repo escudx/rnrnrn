@@ -2,14 +2,11 @@ import sys, traceback, os, json
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
-
+import winreg  # Essencial para leitura correta do tema
 
 def _enable_dpi_awareness():
     try:
         import ctypes
-        # Usa System Aware (1) para evitar glitches em monitores mistos.
-        # O nível 2 (Per Monitor) causava transparência/artefatos ao arrastar
-        # entre telas de DPI diferentes.
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try:
@@ -22,26 +19,31 @@ def _enable_dpi_awareness():
 _enable_dpi_awareness()
 
 
-def _get_system_theme_is_dark():
-    """Lê o registro do Windows para saber se o sistema está em modo Escuro."""
+def _get_windows_theme():
     try:
-        import winreg
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
         val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-        return val == 0  # 0 significa Escuro, 1 significa Claro
+        return "Light" if val == 1 else "Dark"
     except Exception:
-        return True  # Na dúvida, chuta escuro
+        return "Dark" # Fallback seguro
+
+# 1. Define o tema baseado no Windows UMA ÚNICA VEZ
+SYSTEM_THEME = _get_windows_theme()
+
+# 2. Aplica no CustomTkinter (Sem modo 'system' para evitar glitches)
+ctk.set_appearance_mode(SYSTEM_THEME)
+ctk.set_default_color_theme("blue")
 
 
 def _apply_smart_title_bar(win):
-    """Aplica a cor na barra de título baseada na configuração REAL do Windows."""
+    """Pinta a barra de título baseada na variável global, garantindo sincronia."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
 
-        # Lê direto do sistema, ignorando o que o CTk diz
-        is_dark = _get_system_theme_is_dark()
+        # Usa a variável global para decidir a cor da barra
+        is_dark = (SYSTEM_THEME == "Dark")
 
         # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
         value = ctypes.c_int(1 if is_dark else 0)
@@ -49,10 +51,6 @@ def _apply_smart_title_bar(win):
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
     except Exception:
         pass
-
-
-ctk.set_appearance_mode("system")  # Mantém o sistema
-ctk.set_default_color_theme("blue")
 
 
 class SafeCTkTextbox(ctk.CTkTextbox):
