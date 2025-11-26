@@ -83,19 +83,19 @@ CAPSULE_BG = ("#f0f0f0", "#2b2b2b")
 CAPSULE_BORDER = ("#dce4ee", "#454545")
 
 # Manter cores de ação
-DANGER_BG = ("#2e2e2e", "#ff6b6b")
-DANGER_HOVER = ("#c9585c", "#ff8080")
+DANGER_BG = ("#ff6b6b", "#2e2e2e")
+DANGER_HOVER = ("#ff8080", "#c9585c")
 PRIMARY_BTN = _theme_color("CTkButton", "fg_color", ("#3B8ED0", "#1F6AA5"))
 PRIMARY_HOVER = _theme_color("CTkButton", "hover_color", ("#36719F", "#144870"))
 BADGE_BG = PRIMARY_BTN
 BADGE_TEXT = ("#ffffff", "#ffffff")
 HINT_TEXT = ("gray60", "gray40")
-ACTION_BAR_TEXT = _theme_color("CTkLabel", "text_color", ("#f4f4f4", "#1a1a1a"))
-PANEL_BG = _theme_color("CTkFrame", "fg_color", ("#18181b", "#f4f4f5"))
-ACTION_BAR_BG = (_mix_hex(PANEL_BG[0], "#ffffff", 0.06), _mix_hex(PANEL_BG[1], "#000000", 0.05))
-ACTION_BAR_BORDER = (_mix_hex(ACTION_BAR_BG[0], "#ffffff", 0.18), _mix_hex(ACTION_BAR_BG[1], "#000000", 0.14))
-COMBO_BORDER = _theme_color("CTkEntry", "border_color", ("gray45", "#b5b5c8"))
-INPUT_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.2), _mix_hex(PANEL_BG[1], "#ffffff", 0.4))
+ACTION_BAR_TEXT = _theme_color("CTkLabel", "text_color", ("#1a1a1a", "#f4f4f4"))
+PANEL_BG = _theme_color("CTkFrame", "fg_color", ("#f4f4f5", "#18181b"))
+ACTION_BAR_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.02), _mix_hex(PANEL_BG[1], "#000000", 0.05))
+ACTION_BAR_BORDER = (_mix_hex(ACTION_BAR_BG[0], "#000000", 0.1), _mix_hex(ACTION_BAR_BG[1], "#000000", 0.14))
+COMBO_BORDER = _theme_color("CTkEntry", "border_color", ("#b5b5c8", "gray45"))
+INPUT_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.08), _mix_hex(PANEL_BG[1], "#ffffff", 0.4))
 
 
 def _center_window(win, width=None, height=None, parent=None):
