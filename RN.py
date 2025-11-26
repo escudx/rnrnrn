@@ -1634,7 +1634,7 @@ class RNBuilder(ctk.CTk):
         )
 
         def _toggle_preset_free(*_):
-            if self.var_resp.get() == RESP_TEXT_FREE:
+            if self.var_resp_preset.get() == RESP_TEXT_FREE:
                 self.entry_resp_preset_free.pack(side="left", padx=(6, 0))
             else:
                 self.var_resp_preset_free.set("")
