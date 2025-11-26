@@ -1165,9 +1165,12 @@ class RNBuilder(ctk.CTk):
         self.paned.add(self.left_pane, minsize=450, stretch="always")
         self.paned.add(self.right_pane, minsize=450, stretch="always")
 
+        self._paned_ready = False
+        self.after(30, self._ensure_initial_split)
+
         self._bind_shortcuts()
         self.bind("<Map>", self._force_opaque)
-        self.bind("<Configure>", self._force_opaque)
+        self.bind("<Configure>", self._on_configure)
 
     def _norm(self, s: str) -> str:
         return " ".join((s or "").split()).strip()
@@ -1725,6 +1728,22 @@ class RNBuilder(ctk.CTk):
         except Exception:
             pass
 
+    def _ensure_initial_split(self):
+        """Garante que o splitter abra com espaço para o construtor à esquerda."""
+        if self._paned_ready:
+            return
+        try:
+            self.update_idletasks()
+            total = max(self.paned.winfo_width(), self.winfo_width())
+            if total < 200:
+                self.after(50, self._ensure_initial_split)
+                return
+            left = max(int(total * 0.48), 450)
+            self.paned.sash_place(0, left, 1)
+            self._paned_ready = True
+        except Exception:
+            pass
+
     def _force_opaque(self, *_):
         """Reaplica opacidade e barra de título após movimentações."""
         try:
@@ -1735,6 +1754,10 @@ class RNBuilder(ctk.CTk):
             _apply_smart_title_bar(self)
         except Exception:
             pass
+
+    def _on_configure(self, *_):
+        self._ensure_initial_split()
+        self._force_opaque()
 
     def _enable_scrollwheel(self, scrollable: ctk.CTkScrollableFrame):
         canvas = getattr(scrollable, "_parent_canvas", None)
