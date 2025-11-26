@@ -8,8 +8,10 @@ import customtkinter as ctk
 def _enable_dpi_awareness():
     try:
         import ctypes
-        # Nível 2 = Per Monitor Aware (Corrige bug de transparência no monitor externo)
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        # Usa System Aware (1) para evitar glitches em monitores mistos.
+        # O nível 2 (Per Monitor) causava transparência/artefatos ao arrastar
+        # entre telas de DPI diferentes.
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try:
             import ctypes
@@ -2105,7 +2107,57 @@ def _attach_builder_to_RNBuilder():
         self.var_resposta.set("")
         self.var_tarefa_done.set("")
         self.var_evento.set("")
+        try:
+            self.var_conj.set("E")
+        except Exception:
+            pass
         self._refresh_gatilho_fields()
+
+    def _reset_for_next_rule(self: 'RNBuilder'):
+        self._reset_builder_defaults()
+        self._destroy_rows(getattr(self, 'cond_rows', []))
+        self._destroy_rows(getattr(self, 'acao_rows', []))
+        self._ensure_min_builder_rows()
+        self._update_preview()
+        try:
+            self.builder_scroll._parent_canvas.yview_moveto(0)
+        except Exception:
+            pass
+
+    def _toggle_yes_no(self: 'RNBuilder', value: str) -> str:
+        lang = get_lang()
+        v = (value or "").strip()
+        base = v.lower()
+        if lang == 'es':
+            norm = base.replace('í', 'i')
+            if norm == 'si':
+                return 'No'
+            if norm == 'no':
+                return 'Sí'
+        else:
+            if base == 'sim':
+                return 'Não'
+            if base in ('não', 'nao'):
+                return 'Sim'
+        return value
+
+    def _invert_yes_no_conditions(self: 'RNBuilder'):
+        if self.var_gatilho_tipo.get() != GATILHOS[1]:
+            return
+        try:
+            new_val = self._toggle_yes_no(self.var_resposta.get())
+            self.var_resposta.set(new_val)
+        except Exception:
+            pass
+
+        for row in getattr(self, 'cond_rows', []):
+            try:
+                cur = row.var_valor.get()
+                toggled = self._toggle_yes_no(cur)
+                if toggled != cur:
+                    row.var_valor.set(toggled)
+            except Exception:
+                continue
 
     def _destroy_rows(self: 'RNBuilder', rows):
         for r in list(rows):
@@ -2465,11 +2517,18 @@ def _attach_panels_to_RNBuilder():
     def _build_panels(self: 'RNBuilder'):
         parent = self.right_pane
         parent.grid_columnconfigure(0, weight=1)
-        parent.grid_rowconfigure(0, weight=4)
-        parent.grid_rowconfigure(1, weight=5)
+        parent.grid_rowconfigure(0, weight=1)
+
+        panel_scroll = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        panel_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=6)
+        panel_scroll.grid_columnconfigure(0, weight=1)
+        panel_body = scrollable_body(panel_scroll)
+        panel_body.grid_columnconfigure(0, weight=1)
+        panel_body.grid_rowconfigure(0, weight=4)
+        panel_body.grid_rowconfigure(1, weight=5)
 
         self.preview_collapsible = CollapsibleGroup(
-            parent,
+            panel_body,
             text="Pré-visualização da RN atual",
             start_expanded=True
         )
@@ -2494,7 +2553,7 @@ def _attach_panels_to_RNBuilder():
         ctk.CTkButton(left_btnbar, text="Limpar pré-visualização", command=self._clear_preview, width=200).pack(side="left")
 
         self.rn_collapsible = CollapsibleGroup(
-            parent,
+            panel_body,
             text="RNs (lista final)",
             start_expanded=True
         )
@@ -2738,7 +2797,7 @@ def _attach_panels_to_RNBuilder():
             except Exception:
                 pass
 
-    def _add_rn(self: 'RNBuilder'):
+    def _add_rn(self: 'RNBuilder', *, reset_after: bool = True):
         when = self._when_text()
         cond = self._cond_text()
         acoes = self._acoes_text(getattr(self, 'acao_rows', []))
@@ -2750,28 +2809,15 @@ def _attach_panels_to_RNBuilder():
         rn = _compose_rn(idx, when, cond, acoes)
         current.append(rn)
         self._refresh_textbox()
+        if reset_after:
+            self._reset_for_next_rule()
 
     def _add_rn_and_prepare_opposite(self: 'RNBuilder'):
-        self._add_rn()
-        try:
-            if self.var_gatilho_tipo.get() == 'Em TAREFA se CAMPO for RESPOSTA':
-                lang = get_lang()
-                resp = (self.var_resposta.get() or '').strip().lower()
-                def _norm_es(x: str) -> str:
-                    return x.replace('í', 'i').replace('Í', 'i')
-                if lang == 'es':
-                    r = _norm_es(resp)
-                    if r == 'si':
-                        self.var_resposta.set('No')
-                    elif r == 'no':
-                        self.var_resposta.set('Sí')
-                else:
-                    if resp == 'sim':
-                        self.var_resposta.set('Não')
-                    elif resp in ('não', 'nao'):
-                        self.var_resposta.set('Sim')
-        except Exception:
-            pass
+        when_before = self._when_text()
+        self._add_rn(reset_after=False)
+        if not when_before:
+            return
+        self._invert_yes_no_conditions()
         self._destroy_rows(getattr(self, 'acao_rows', []))
         if hasattr(self, '_ensure_min_builder_rows'):
             self._ensure_min_builder_rows()
