@@ -7,7 +7,7 @@ import customtkinter as ctk
 def _enable_dpi_awareness():
     try:
         import ctypes
-        # Tenta definir Per-Monitor V2 (-4). 
+        # Tenta definir Per-Monitor V2 (-4).
         # Isso impede que o Windows 'estique' a janela (causa do desfoque)
         # e permite que o CustomTkinter recalcule a escala nitidamente.
         ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
@@ -17,7 +17,12 @@ def _enable_dpi_awareness():
             import ctypes
             ctypes.windll.shcore.SetProcessDpiAwareness(1)
         except Exception:
-            pass
+            try:
+                # Fallback legado para Windows 7/8
+                import ctypes
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
 
 _enable_dpi_awareness()
 
