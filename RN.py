@@ -2,8 +2,8 @@ import sys, traceback, os, json
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
-import winreg  # Essencial para leitura correta do tema
 
+# --- 1. CONFIGURAÇÃO DE DPI (Mantém a interface nítida) ---
 def _enable_dpi_awareness():
     try:
         import ctypes
@@ -15,43 +15,39 @@ def _enable_dpi_awareness():
         except Exception:
             pass
 
-
 _enable_dpi_awareness()
 
-
-def _get_windows_theme():
-    try:
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
-        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-        return "Light" if val == 1 else "Dark"
-    except Exception:
-        return "Dark" # Fallback seguro
-
-# 1. Define o tema baseado no Windows UMA ÚNICA VEZ
-SYSTEM_THEME = _get_windows_theme()
-
-# 2. Aplica no CustomTkinter (Sem modo 'system' para evitar glitches)
-ctk.set_appearance_mode(SYSTEM_THEME)
+# --- 2. TEMA FORÇADO: DARK MODE SEMPRE ---
+# Ignora o sistema. O app será sempre PRETO.
+ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 
 def _apply_smart_title_bar(win):
-    """Pinta a barra de título baseada na variável global, garantindo sincronia."""
+    """Força a barra de título do Windows a ser ESCURA (Dark Mode)."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
-
-        # Usa a variável global para decidir a cor da barra
-        is_dark = (SYSTEM_THEME == "Dark")
-
-        # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
-        value = ctypes.c_int(1 if is_dark else 0)
-
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
+        
+        # Valor 1 = True (Ativar Dark Mode na barra)
+        # Forçamos sempre 1, pois o app agora é sempre Dark.
+        value = ctypes.c_int(1)
+        
+        # Tenta atributo 20 (Windows 11 / Win 10 recentes)
+        try:
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
+        except:
+            pass
+            
+        # Tenta atributo 19 (Windows 10 antigo), por garantia
+        try:
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), 4)
+        except:
+            pass
+            
     except Exception:
         pass
-
 
 class SafeCTkTextbox(ctk.CTkTextbox):
     _FORBIDDEN_TAG_OPTIONS = {"font", "ctk_font"}
