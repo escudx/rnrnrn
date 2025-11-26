@@ -1,15 +1,13 @@
 import sys, traceback, os, json
-from typing import Optional
 import tkinter as tk
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
-
+import winreg  # Essencial para leitura correta do tema
 
 def _enable_dpi_awareness():
     try:
         import ctypes
-        # Nível 2 = Per Monitor Aware (Corrige bug de transparência no monitor externo)
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         try:
             import ctypes
@@ -21,14 +19,35 @@ def _enable_dpi_awareness():
 _enable_dpi_awareness()
 
 
-def _apply_dark_title_bar(win):
-    """Força a barra de título do Windows a ficar escura."""
+def _get_windows_theme():
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return "Light" if val == 1 else "Dark"
+    except Exception:
+        return "Dark" # Fallback seguro
+
+# 1. Define o tema baseado no Windows UMA ÚNICA VEZ
+SYSTEM_THEME = _get_windows_theme()
+
+# 2. Aplica no CustomTkinter (Sem modo 'system' para evitar glitches)
+ctk.set_appearance_mode(SYSTEM_THEME)
+ctk.set_default_color_theme("blue")
+
+
+def _apply_smart_title_bar(win):
+    """Pinta a barra de título baseada na variável global, garantindo sincronia."""
     try:
         import ctypes
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+
+        # Usa a variável global para decidir a cor da barra
+        is_dark = (SYSTEM_THEME == "Dark")
+
         # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE
-        value = ctypes.c_int(1)
+        value = ctypes.c_int(1 if is_dark else 0)
+
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), 4)
     except Exception:
         pass
@@ -81,19 +100,19 @@ CAPSULE_BG = ("#f0f0f0", "#2b2b2b")
 CAPSULE_BORDER = ("#dce4ee", "#454545")
 
 # Manter cores de ação
-DANGER_BG = ("#2e2e2e", "#ff6b6b")
-DANGER_HOVER = ("#c9585c", "#ff8080")
+DANGER_BG = ("#ff6b6b", "#2e2e2e")
+DANGER_HOVER = ("#ff8080", "#c9585c")
 PRIMARY_BTN = _theme_color("CTkButton", "fg_color", ("#3B8ED0", "#1F6AA5"))
 PRIMARY_HOVER = _theme_color("CTkButton", "hover_color", ("#36719F", "#144870"))
 BADGE_BG = PRIMARY_BTN
 BADGE_TEXT = ("#ffffff", "#ffffff")
 HINT_TEXT = ("gray60", "gray40")
-ACTION_BAR_TEXT = _theme_color("CTkLabel", "text_color", ("#f4f4f4", "#1a1a1a"))
-PANEL_BG = _theme_color("CTkFrame", "fg_color", ("#18181b", "#f4f4f5"))
-ACTION_BAR_BG = (_mix_hex(PANEL_BG[0], "#ffffff", 0.06), _mix_hex(PANEL_BG[1], "#000000", 0.05))
-ACTION_BAR_BORDER = (_mix_hex(ACTION_BAR_BG[0], "#ffffff", 0.18), _mix_hex(ACTION_BAR_BG[1], "#000000", 0.14))
-COMBO_BORDER = _theme_color("CTkEntry", "border_color", ("gray45", "#b5b5c8"))
-INPUT_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.2), _mix_hex(PANEL_BG[1], "#ffffff", 0.4))
+ACTION_BAR_TEXT = _theme_color("CTkLabel", "text_color", ("#1a1a1a", "#f4f4f4"))
+PANEL_BG = _theme_color("CTkFrame", "fg_color", ("#f4f4f5", "#18181b"))
+ACTION_BAR_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.02), _mix_hex(PANEL_BG[1], "#000000", 0.05))
+ACTION_BAR_BORDER = (_mix_hex(ACTION_BAR_BG[0], "#000000", 0.1), _mix_hex(ACTION_BAR_BG[1], "#000000", 0.14))
+COMBO_BORDER = _theme_color("CTkEntry", "border_color", ("#b5b5c8", "gray45"))
+INPUT_BG = (_mix_hex(PANEL_BG[0], "#000000", 0.08), _mix_hex(PANEL_BG[1], "#ffffff", 0.4))
 
 
 def _center_window(win, width=None, height=None, parent=None):
@@ -116,10 +135,9 @@ def _center_window(win, width=None, height=None, parent=None):
 
         win.geometry(f"{w}x{h}+{x}+{y}")
 
-        # --- CORREÇÃO APLICADA AQUI ---
-        # Força a barra escura após o posicionamento final
-        _apply_dark_title_bar(win)
-        # ------------------------------
+        # USA A NOVA FUNÇÃO INTELIGENTE
+        _apply_smart_title_bar(win)
+        
     except Exception:
         pass
 
@@ -139,9 +157,6 @@ def _show_fatal_error(exc: BaseException):
         print(tb, file=sys.stderr)
 
 sys.excepthook = lambda et, ev, tb: _show_fatal_error(ev)
-
-ctk.set_appearance_mode("system")
-ctk.set_default_color_theme("blue")
 
 CUR_L, CUR_R = "“", "”"
 
@@ -1230,7 +1245,7 @@ class RNBuilder(ctk.CTk):
         try:
             dialog = ctk.CTkInputDialog(text=title, title=title)
             try:
-                _apply_dark_title_bar(dialog)
+                _apply_smart_title_bar(dialog)
             except Exception:
                 pass
 
@@ -1445,7 +1460,7 @@ class RNBuilder(ctk.CTk):
         top = ctk.CTkToplevel(self)
         top.title("Gerenciador de Listas")
         try:
-            _apply_dark_title_bar(top)
+            _apply_smart_title_bar(top)
         except Exception:
             pass
         top.transient(self)
@@ -2105,7 +2120,57 @@ def _attach_builder_to_RNBuilder():
         self.var_resposta.set("")
         self.var_tarefa_done.set("")
         self.var_evento.set("")
+        try:
+            self.var_conj.set("E")
+        except Exception:
+            pass
         self._refresh_gatilho_fields()
+
+    def _reset_for_next_rule(self: 'RNBuilder'):
+        self._reset_builder_defaults()
+        self._destroy_rows(getattr(self, 'cond_rows', []))
+        self._destroy_rows(getattr(self, 'acao_rows', []))
+        self._ensure_min_builder_rows()
+        self._update_preview()
+        try:
+            self.builder_scroll._parent_canvas.yview_moveto(0)
+        except Exception:
+            pass
+
+    def _toggle_yes_no(self: 'RNBuilder', value: str) -> str:
+        lang = get_lang()
+        v = (value or "").strip()
+        base = v.lower()
+        if lang == 'es':
+            norm = base.replace('í', 'i')
+            if norm == 'si':
+                return 'No'
+            if norm == 'no':
+                return 'Sí'
+        else:
+            if base == 'sim':
+                return 'Não'
+            if base in ('não', 'nao'):
+                return 'Sim'
+        return value
+
+    def _invert_yes_no_conditions(self: 'RNBuilder'):
+        if self.var_gatilho_tipo.get() != GATILHOS[1]:
+            return
+        try:
+            new_val = self._toggle_yes_no(self.var_resposta.get())
+            self.var_resposta.set(new_val)
+        except Exception:
+            pass
+
+        for row in getattr(self, 'cond_rows', []):
+            try:
+                cur = row.var_valor.get()
+                toggled = self._toggle_yes_no(cur)
+                if toggled != cur:
+                    row.var_valor.set(toggled)
+            except Exception:
+                continue
 
     def _destroy_rows(self: 'RNBuilder', rows):
         for r in list(rows):
@@ -2464,46 +2529,55 @@ _attach_builder_to_RNBuilder()
 def _attach_panels_to_RNBuilder():
     def _build_panels(self: 'RNBuilder'):
         parent = self.right_pane
-        parent.grid_columnconfigure(0, weight=1)
-        parent.grid_rowconfigure(0, weight=4)
-        parent.grid_rowconfigure(1, weight=5)
 
+        # --- CONFIGURAÇÃO DO GRID (CORRIGIDO PARA TELAS 14") ---
+        parent.grid_columnconfigure(0, weight=1)
+        parent.grid_rowconfigure(0, weight=1)  # Preview (Cresce pouco)
+        parent.grid_rowconfigure(1, weight=0)  # Botoes (Fixo, nunca esmaga)
+        parent.grid_rowconfigure(2, weight=10)  # Lista (Cresce muito)
+
+        # --- 1. PREVIEW ---
         self.preview_collapsible = CollapsibleGroup(
             parent,
             text="Pré-visualização da RN atual",
             start_expanded=True
         )
-        self.preview_collapsible.grid(row=0, column=0, padx=(0,0), pady=(0,8), sticky="nsew")
+        self.preview_collapsible.grid(row=0, column=0, padx=(0,0), pady=(0,4), sticky="nsew")
         preview_group = self.preview_collapsible.get_inner_frame()
         preview_group.grid_rowconfigure(0, weight=1)
         preview_group.grid_columnconfigure(0, weight=1)
 
-        self.prev_box = SafeCTkTextbox(preview_group)
-        self.prev_box.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, 8))
+        self.prev_box = SafeCTkTextbox(preview_group, height=60)  # Altura mínima reduzida
+        self.prev_box.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        try: self.prev_box.configure(wrap="word")
+        except: pass
 
-        try:
-            self.prev_box.configure(wrap="word")
-        except Exception:
-            pass
+        # --- 2. FAIXA DE BOTÕES (AGORA FORA DO GRUPO) ---
+        # Isso impede que eles sumam quando o preview encolhe
+        mid_bar = ctk.CTkFrame(parent, fg_color="transparent")
+        mid_bar.grid(row=1, column=0, sticky="ew", padx=0, pady=(4, 8))
 
-        left_btnbar = ctk.CTkFrame(preview_group, fg_color="transparent")
-        left_btnbar.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 2))
-        ctk.CTkButton(left_btnbar, text="Adicionar RN", command=self._add_rn, width=160).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(left_btnbar, text="Adicionar RN e preparar oposto (Sim/Não)",
-                      command=self._add_rn_and_prepare_opposite, width=300).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(left_btnbar, text="Limpar pré-visualização", command=self._clear_preview, width=200).pack(side="left")
+        mid_bar.grid_columnconfigure(0, weight=1)
+        mid_bar.grid_columnconfigure(1, weight=2)
+        mid_bar.grid_columnconfigure(2, weight=1)
 
+        ctk.CTkButton(mid_bar, text="Adicionar RN", command=self._add_rn).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(mid_bar, text="Adicionar + Oposto", command=self._add_rn_and_prepare_opposite).grid(row=0, column=1, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(mid_bar, text="Limpar Preview", command=self._clear_preview, fg_color="transparent", border_width=1, text_color=("gray10", "gray90")).grid(row=0, column=2, sticky="ew")
+
+        # --- 3. LISTA FINAL ---
         self.rn_collapsible = CollapsibleGroup(
             parent,
             text="RNs (lista final)",
             start_expanded=True
         )
-        self.rn_collapsible.grid(row=1, column=0, padx=(0,0), pady=(0,0), sticky="nsew")
+        self.rn_collapsible.grid(row=2, column=0, padx=(0,0), pady=(0,0), sticky="nsew")
         rn_group = self.rn_collapsible.get_inner_frame()
-        rn_group.grid_rowconfigure(2, weight=2)
-        rn_group.grid_rowconfigure(3, weight=3)
+
+        rn_group.grid_rowconfigure(2, weight=1)
         rn_group.grid_columnconfigure(0, weight=1)
 
+        # Header Fluxo
         flow_bar = ctk.CTkFrame(rn_group, fg_color="transparent")
         flow_bar.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 6))
         flow_bar.grid_columnconfigure(1, weight=1)
@@ -2515,34 +2589,36 @@ def _attach_panels_to_RNBuilder():
             variable=self.flow_var,
             values=self._get_flow_names(),
             command=self._on_flow_selected,
-            width=220,
+            width=200,
         )
         self.flow_combo.grid(row=0, column=1, sticky="w", pady=2)
 
         flow_btns = ctk.CTkFrame(flow_bar, fg_color="transparent")
         flow_btns.grid(row=0, column=2, sticky="e", padx=(8, 0))
-        ctk.CTkButton(flow_btns, text="Novo", width=70, command=self._new_flow).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(flow_btns, text="Renomear", width=90, command=self._rename_flow).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(flow_btns, text="Excluir", width=80, command=self._delete_flow, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
+        ctk.CTkButton(flow_btns, text="Novo", width=60, command=self._new_flow).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(flow_btns, text="Renomear", width=80, command=self._rename_flow).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(flow_btns, text="Excluir", width=70, command=self._delete_flow, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
 
+        # Botões de Ação da Lista
         right_btnbar = ctk.CTkFrame(rn_group, fg_color="transparent")
         right_btnbar.grid(row=1, column=0, sticky="w", padx=0, pady=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Copiar RN", command=self._copy_single_rn, width=120).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Copiar tudo", command=self._copy_all, width=110).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Salvar .txt", command=self._save_txt, width=110).pack(side="left", padx=(0, 6))
-        ctk.CTkButton(right_btnbar, text="Limpar RNs", command=lambda: self._clear_rns(confirm=True), width=110).pack(side="left")
 
+        ctk.CTkButton(right_btnbar, text="Copiar RN", command=self._copy_single_rn, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Copiar tudo", command=self._copy_all, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Salvar .txt", command=self._save_txt, width=90).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(right_btnbar, text="Limpar RNs", command=lambda: self._clear_rns(confirm=True), width=90, fg_color=DANGER_BG, hover_color=DANGER_HOVER).pack(side="left")
+
+        # Lista Scrollable
         self.rn_mgr = ctk.CTkScrollableFrame(rn_group)
         self.rn_mgr.grid(row=2, column=0, sticky="nsew", padx=0, pady=(0, 6))
         self.rn_mgr.grid_columnconfigure(0, weight=1)
         self._enable_scrollwheel(self.rn_mgr)
 
-        self.txt = ctk.CTkTextbox(rn_group)
-        self.txt.grid(row=3, column=0, sticky="nsew", padx=0, pady=0)
-        try:
-            self.txt.configure(wrap="word")
-        except Exception:
-            pass
+        # Caixa oculta
+        self.txt = ctk.CTkTextbox(rn_group, height=1)
+        self.txt.grid(row=3, column=0, sticky="ew", padx=0, pady=0)
+        try: self.txt.configure(wrap="word")
+        except: pass
 
         self._refresh_flow_controls()
 
@@ -2662,7 +2738,7 @@ def _attach_panels_to_RNBuilder():
         top = ctk.CTkToplevel(self)
         top.title(f"Editar RN #{idx + 1}")
         try:
-            _apply_dark_title_bar(top)
+            _apply_smart_title_bar(top)
         except Exception:
             pass
         top.transient(self)
@@ -2738,7 +2814,7 @@ def _attach_panels_to_RNBuilder():
             except Exception:
                 pass
 
-    def _add_rn(self: 'RNBuilder'):
+    def _add_rn(self: 'RNBuilder', *, reset_after: bool = True):
         when = self._when_text()
         cond = self._cond_text()
         acoes = self._acoes_text(getattr(self, 'acao_rows', []))
@@ -2750,28 +2826,15 @@ def _attach_panels_to_RNBuilder():
         rn = _compose_rn(idx, when, cond, acoes)
         current.append(rn)
         self._refresh_textbox()
+        if reset_after:
+            self._reset_for_next_rule()
 
     def _add_rn_and_prepare_opposite(self: 'RNBuilder'):
-        self._add_rn()
-        try:
-            if self.var_gatilho_tipo.get() == 'Em TAREFA se CAMPO for RESPOSTA':
-                lang = get_lang()
-                resp = (self.var_resposta.get() or '').strip().lower()
-                def _norm_es(x: str) -> str:
-                    return x.replace('í', 'i').replace('Í', 'i')
-                if lang == 'es':
-                    r = _norm_es(resp)
-                    if r == 'si':
-                        self.var_resposta.set('No')
-                    elif r == 'no':
-                        self.var_resposta.set('Sí')
-                else:
-                    if resp == 'sim':
-                        self.var_resposta.set('Não')
-                    elif resp in ('não', 'nao'):
-                        self.var_resposta.set('Sim')
-        except Exception:
-            pass
+        when_before = self._when_text()
+        self._add_rn(reset_after=False)
+        if not when_before:
+            return
+        self._invert_yes_no_conditions()
         self._destroy_rows(getattr(self, 'acao_rows', []))
         if hasattr(self, '_ensure_min_builder_rows'):
             self._ensure_min_builder_rows()
