@@ -7,22 +7,29 @@ import customtkinter as ctk
 def _enable_dpi_awareness():
     try:
         import ctypes
+        user32 = ctypes.windll.user32
         # Tenta definir Per-Monitor V2 (-4).
         # Isso impede que o Windows 'estique' a janela (causa do desfoque)
         # e permite que o CustomTkinter recalcule a escala nitidamente.
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
+        result = user32.SetProcessDpiAwarenessContext(-4)
+        if result == 0:
+            raise OSError("SetProcessDpiAwarenessContext failed")
     except Exception:
         try:
-            # Fallback para System Aware (nível 1) apenas se o V2 falhar
+            # Fallback para Per-Monitor (nível 2) ou System Aware caso o V2 falhe
             import ctypes
-            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
             try:
-                # Fallback legado para Windows 7/8
                 import ctypes
-                ctypes.windll.user32.SetProcessDPIAware()
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
             except Exception:
-                pass
+                try:
+                    # Fallback legado para Windows 7/8
+                    import ctypes
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
 
 _enable_dpi_awareness()
 
@@ -1159,6 +1166,8 @@ class RNBuilder(ctk.CTk):
         self.paned.add(self.right_pane, minsize=450, stretch="always")
 
         self._bind_shortcuts()
+        self.bind("<Map>", self._force_opaque)
+        self.bind("<Configure>", self._force_opaque)
 
     def _norm(self, s: str) -> str:
         return " ".join((s or "").split()).strip()
@@ -1713,6 +1722,17 @@ class RNBuilder(ctk.CTk):
 
         try:
             self.attributes("-alpha", 1.0)
+        except Exception:
+            pass
+
+    def _force_opaque(self, *_):
+        """Reaplica opacidade e barra de título após movimentações."""
+        try:
+            self.attributes("-alpha", 1.0)
+        except Exception:
+            pass
+        try:
+            _apply_smart_title_bar(self)
         except Exception:
             pass
 
@@ -2690,13 +2710,22 @@ def _attach_panels_to_RNBuilder():
         mgr_body = scrollable_body(self.rn_mgr)
         for w in mgr_body.winfo_children():
             w.destroy()
-        
+
+        mgr_body.update_idletasks()
+        wraplength = max(520, self.rn_mgr.winfo_width() - 140)
+
         current = self._current_rns()
         for i, rn in enumerate(current):
             row = ctk.CTkFrame(mgr_body)
-            row.grid(row=i, column=0, sticky="we", padx=4, pady=2)
+            row.grid(row=i, column=0, sticky="we", padx=6, pady=6)
             row.grid_columnconfigure(0, weight=1)
-            ctk.CTkLabel(row, text=self._truncate(rn), anchor="w").grid(row=0, column=0, sticky="w", padx=(4, 6))
+            ctk.CTkLabel(
+                row,
+                text=rn,
+                anchor="w",
+                justify="left",
+                wraplength=wraplength,
+            ).grid(row=0, column=0, sticky="w", padx=(4, 8))
             btns = ctk.CTkFrame(row, fg_color="transparent")
             btns.grid(row=0, column=1, sticky="e")
             up = ctk.CTkButton(btns, text="↑", width=28, command=lambda idx=i: self._move_rn(idx, -1))
